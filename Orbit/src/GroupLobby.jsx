@@ -4,14 +4,12 @@ import { supabase } from './supabaseClient'
 export default function GroupLobby({ session, onJoin }) {
   const [roomCode, setRoomCode] = useState('')
   const [loading, setLoading] = useState(false)
+  const [createdCode, setCreatedCode] = useState(null)
 
-  // OPTION A: Create a brand new group
   const createGroup = async () => {
     setLoading(true)
-    // 1. Generate a random 4-character code (e.g., "XJ92")
     const code = Math.random().toString(36).substring(2, 6).toUpperCase()
 
-    // 2. Insert into groups table
     const { data: groupData, error: groupError } = await supabase
       .from('groups')
       .insert([{ code }])
@@ -24,14 +22,12 @@ export default function GroupLobby({ session, onJoin }) {
       return
     }
 
-    // 3. Add myself to that group
+    setCreatedCode(code)
     await joinGroupById(groupData.id)
   }
 
-  // OPTION B: Join existing group
   const joinGroup = async () => {
     setLoading(true)
-    // 1. Find the group ID from the code
     const { data, error } = await supabase
       .from('groups')
       .select('id')
@@ -44,11 +40,9 @@ export default function GroupLobby({ session, onJoin }) {
       return
     }
 
-    // 2. Join it
     await joinGroupById(data.id)
   }
 
-  // Helper: Updates the user's profile with the group_id
   const joinGroupById = async (groupId) => {
     const { error } = await supabase
       .from('profiles')
@@ -56,34 +50,67 @@ export default function GroupLobby({ session, onJoin }) {
       .eq('id', session.user.id)
 
     if (error) alert(error.message)
-    else onJoin() // Tell the parent app we are done!
+    else onJoin()
     setLoading(false)
   }
 
   return (
-    <div className="card" style={{ textAlign: 'center', padding: '40px', border: '1px solid #ccc', borderRadius: '10px' }}>
-      <h2>👋 You need a Squad!</h2>
-      <p>Create a new accountability group or join an existing one.</p>
+    <div className="card">
+      <h2>👋 Welcome to Orbit!</h2>
+      <p>Create a new squad or join an existing one to start tracking goals with your friends.</p>
 
-      <div style={{ margin: '30px 0' }}>
-        <button onClick={createGroup} disabled={loading} style={{ padding: '15px 30px', fontSize: '18px' }}>
-          ✨ Create New Party
+      <div className="lobby-actions">
+        <button 
+          onClick={createGroup} 
+          disabled={loading}
+        >
+          ✨ Create New Squad
         </button>
+        
+        {createdCode && (
+          <div style={{ 
+            background: '#f0f4ff', 
+            padding: '15px', 
+            borderRadius: '12px',
+            border: '2px dashed #667eea'
+          }}>
+            <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#667eea' }}>
+              Your Room Code:
+            </p>
+            <p style={{ 
+              fontSize: '2rem', 
+              fontWeight: '700', 
+              letterSpacing: '8px',
+              color: '#667eea',
+              margin: 0
+            }}>
+              {createdCode}
+            </p>
+            <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: '#666' }}>
+              Share this code with your friends!
+            </p>
+          </div>
+        )}
       </div>
 
       <hr />
-      <p>Or join a friend:</p>
       
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+      <p>Or join a friend's squad:</p>
+      
+      <div className="join-input-group">
         <input 
           type="text" 
-          placeholder="ENTER CODE" 
+          placeholder="CODE" 
           maxLength={4}
           value={roomCode}
-          onChange={(e) => setRoomCode(e.target.value)}
-          style={{ textTransform: 'uppercase', textAlign: 'center', width: '120px', fontSize: '20px' }}
+          onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
         />
-        <button onClick={joinGroup} disabled={loading || roomCode.length < 4}>Join</button>
+        <button 
+          onClick={joinGroup} 
+          disabled={loading || roomCode.length < 4}
+        >
+          Join Squad
+        </button>
       </div>
     </div>
   )
