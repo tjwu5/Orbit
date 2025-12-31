@@ -115,7 +115,7 @@ export default function GroupLobby({ session, onGroupJoined }) {
         <input 
           type="text" 
           placeholder="CODE" 
-          maxLength={4}
+          maxLength={8}
           value={roomCode}
           onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
           onKeyPress={(e) => e.key === 'Enter' && joinGroup()}
