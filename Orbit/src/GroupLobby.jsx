@@ -1,37 +1,67 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
-export default function GroupLobby({ session, onJoin }) {
+export default function GroupLobby({ session, onGroupJoined }) {
   const [roomCode, setRoomCode] = useState('')
   const [loading, setLoading] = useState(false)
-  const [createdCode, setCreatedCode] = useState(null)
+
+  const generateCode = () => Math.random().toString(36).substring(2, 8).toUpperCase()
 
   const createGroup = async () => {
     setLoading(true)
-    const code = Math.random().toString(36).substring(2, 6).toUpperCase()
+    let attempt = 0
+    let groupData = null
+    let lastError = null
 
-    const { data: groupData, error: groupError } = await supabase
-      .from('groups')
-      .insert([{ code }])
-      .select()
-      .single()
+    while (attempt < 5 && !groupData) {
+      const code = generateCode()
 
-    if (groupError) {
-      alert(groupError.message)
+      const { data, error } = await supabase
+        .from('groups')
+        .insert([{ code }])
+        .select()
+        .single()
+
+      if (error) {
+        lastError = error
+        attempt += 1
+        continue
+      }
+
+      groupData = { ...data, code }
+    }
+
+    if (!groupData) {
+      alert(lastError?.message || 'Could not create a squad. Please try again.')
       setLoading(false)
       return
     }
 
-    setCreatedCode(code)
-    await joinGroupById(groupData.id)
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ group_id: groupData.id })
+      .eq('id', session.user.id)
+
+    if (profileError) {
+      alert(profileError.message)
+      setLoading(false)
+      return
+    }
+
+    setLoading(false)
+    onGroupJoined(groupData.code, groupData.id, true)
   }
 
   const joinGroup = async () => {
+    if (roomCode.length < 4) return
+    
     setLoading(true)
+    const upperCode = roomCode.toUpperCase()
+    
     const { data, error } = await supabase
       .from('groups')
-      .select('id')
-      .eq('code', roomCode.toUpperCase())
+      .select('id, code')
+      .eq('code', upperCode)
       .single()
 
     if (error || !data) {
@@ -40,17 +70,26 @@ export default function GroupLobby({ session, onJoin }) {
       return
     }
 
-    await joinGroupById(data.id)
-  }
+    console.log('Found group:', data)
 
-  const joinGroupById = async (groupId) => {
-    const { error } = await supabase
+    // Update user's profile with the group
+    const { error: profileError } = await supabase
       .from('profiles')
-      .update({ group_id: groupId })
+      .update({ group_id: data.id })
       .eq('id', session.user.id)
 
-    if (error) alert(error.message)
-    else onJoin()
+    if (profileError) {
+      alert(profileError.message)
+      setLoading(false)
+      return
+    }
+
+    console.log('Profile updated, calling onGroupJoined with:', data.code, data.id, false)
+    
+    // Notify parent that group was joined (isNewGroup = false)
+    // Pass the group ID as well so parent can switch to TaskList immediately
+    onGroupJoined(data.code, data.id, false)
+    
     setLoading(false)
   }
 
@@ -66,31 +105,6 @@ export default function GroupLobby({ session, onJoin }) {
         >
           ✨ Create New Squad
         </button>
-        
-        {createdCode && (
-          <div style={{ 
-            background: '#f0f4ff', 
-            padding: '15px', 
-            borderRadius: '12px',
-            border: '2px dashed #667eea'
-          }}>
-            <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#667eea' }}>
-              Your Room Code:
-            </p>
-            <p style={{ 
-              fontSize: '2rem', 
-              fontWeight: '700', 
-              letterSpacing: '8px',
-              color: '#667eea',
-              margin: 0
-            }}>
-              {createdCode}
-            </p>
-            <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: '#666' }}>
-              Share this code with your friends!
-            </p>
-          </div>
-        )}
       </div>
 
       <hr />
@@ -104,6 +118,7 @@ export default function GroupLobby({ session, onJoin }) {
           maxLength={4}
           value={roomCode}
           onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+          onKeyPress={(e) => e.key === 'Enter' && joinGroup()}
         />
         <button 
           onClick={joinGroup} 
